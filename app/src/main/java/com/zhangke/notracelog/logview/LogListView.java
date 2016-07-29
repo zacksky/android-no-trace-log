@@ -1,0 +1,137 @@
+package com.zhangke.notracelog.logview;
+
+import android.app.Activity;
+import android.content.Context;
+import android.support.v4.app.Fragment;
+import android.text.TextUtils;
+import android.util.AttributeSet;
+import android.view.View;
+import android.widget.ListView;
+
+import com.zhangke.notracelog.MyApplication;
+import com.zhangke.notracelog.base.BaseActivity;
+import com.zhangke.notracelog.base.BaseFragment;
+import com.zhangke.notracelog.util.AutoLogUtil;
+import com.zhangke.notracelog.util.CommonExecutor;
+
+import java.lang.reflect.Field;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Created by zhangke on 16/6/14.
+ */
+public class LogListView extends ListView {
+    private String mLogName;
+    private Object mObject;
+
+    public LogListView(Context context) {
+        super(context);
+    }
+
+    public LogListView(Context context, AttributeSet attrs) {
+        super(context, attrs);
+    }
+
+    public LogListView(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+    }
+
+    @Override
+    public void setOnItemClickListener(OnItemClickListener listener) {
+        CommonExecutor.executor(new Runnable() {
+            @Override
+            public void run() {
+                Activity activity = MyApplication.getInstance().getCurrentTopActivity();
+                if (activity instanceof BaseActivity) {
+                    setComponentsName(activity);
+                    List<Fragment> fragmentList = AutoLogUtil.getAllFragments((BaseActivity) activity);
+                    for (Fragment fragment : fragmentList) {
+                        setComponentsName(fragment);
+                    }
+                }
+            }
+        });
+        super.setOnItemClickListener(listener);
+    }
+
+    /**
+     * 如果mLogName为空
+     * 通过反射给activity或者fragment里面的所有类型是LogButton
+     * 的变量的mLogName赋值
+     *
+     * @param f
+     */
+    private void setComponentsName(Object f) {
+        // 获取f对象对应类中的所有属性域
+        Field[] fields = f.getClass().getDeclaredFields();
+        for (int i = 0, len = fields.length; i < len; i++) {
+            String varName = fields[i].getName();
+            try {
+                boolean accessFlag = fields[i].isAccessible();
+                fields[i].setAccessible(true);
+                Object oo = fields[i].get(f);
+                if (fields[i].getType() == this.getClass()) {
+                    ((LogListView) oo).setObject(f);
+                    if (TextUtils.isEmpty(((LogListView) oo).getLogName())) {
+                        if (f instanceof BaseActivity) {
+                            ((LogListView) oo).setLogName(((BaseActivity) f).getClass().getSimpleName() + "-" + varName);
+                        } else if (f instanceof BaseFragment) {
+                            ((LogListView) oo).setLogName(((BaseFragment) f).getClass().getSimpleName() + "-" + varName);
+                        }
+                    }
+                }
+                fields[i].setAccessible(accessFlag);
+            } catch (IllegalArgumentException ex) {
+                ex.printStackTrace();
+            } catch (IllegalAccessException ex) {
+                ex.printStackTrace();
+            }
+        }
+    }
+
+
+    @Override
+    public boolean performItemClick(View view, int position, long id) {
+        boolean result = super.performItemClick(view, position, id);
+
+        Map<String, String> extendLogMap = null;
+        if (mObject != null) {
+            if (mObject instanceof BaseActivity) {
+                extendLogMap = ((BaseActivity) mObject).getExtendLogMap();
+            } else if (mObject instanceof BaseFragment) {
+                extendLogMap = ((BaseFragment) mObject).getExtendLogMap();
+            }
+        }
+        //发送log数据
+        if (TextUtils.isEmpty(mLogName)) {
+            if (extendLogMap != null) {
+//                LogUtil.sendLog(mLogName,extendLogMap);
+            } else {
+//                LogUtil.sendLog(mLogName);
+            }
+        }
+        //发送完后把extendLogMap清空
+        if (extendLogMap != null) {
+            extendLogMap.clear();
+        }
+        return result;
+    }
+
+    public void setLogName(String name) {
+        mLogName = name;
+    }
+
+    public String getLogName() {
+        return mLogName;
+    }
+
+    public void setObject(Object o) {
+        mObject = o;
+    }
+
+    public Object getObject() {
+        return mObject;
+    }
+
+}
